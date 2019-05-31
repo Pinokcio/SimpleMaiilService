@@ -142,7 +142,6 @@ int main(int argc, char *argv[])
   bzero(buffer,sizeof(buffer));
   SSL_read(ssl, buffer, sizeof(buffer));
 
-
   strcat(from_email,">\r\n");
 	char from[50] = "mail from: <";
 	strcat(from,from_email);
