@@ -1,6 +1,5 @@
 #include "common.h"
 
-#define MAXBUF 4096
 #define CERTFILE "client.pem"
 
 typedef struct mail{
