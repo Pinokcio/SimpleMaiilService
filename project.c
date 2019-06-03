@@ -87,11 +87,12 @@ int get_idcnt(){
 }
 int receive_mail(){
   // get_idcnt를 통해 얻은 수만큼 mail 변수에 동적할당
+  // 알맞은 메일 json 파일에 존재하지 않는 id의 메일만 추가로 기입해야함.
+
   // 크롤러를 통해 받은 메세지들을 메일 구조체에 담음.
   // spam_email.txt 확인 후 존재하는 이메일은 구조체에 담지 않을 것.
   mail = (mail_info*)malloc(sizeof(mail_info)*get_idcnt());
   int i = 0;
-  // mail_id?;sub?;from?;from_email?;is_trash?;is_read
 }
 
 char * get_mail_body(){
@@ -102,13 +103,14 @@ void list_mail(){
   // 메일 보관함에 있는 메일들을 모두 출력.
   for(int i=0;i<*mail_cnt;i++){
     if(!mail[i].is_trash){
-      printf("%s\t%s\t%s<%s>\t%d",(&mail[i])->mail_id,(&mail[i])->sub,(&mail[i])->from_name,(&mail[i])->from_email,mail[i].day);
+      printf("%s\t%s\t%s<%s>\t%d\n",(&mail[i])->mail_id,(&mail[i])->sub,(&mail[i])->from_name,(&mail[i])->from_email,mail[i].day);
     }
   }
 }
 
 int alert_unread_mail(){
  // 처음 프로그램 작동시 새롭게 추가된 메세지가 있으면 알려줌.
+ // 
 }
 
 int open_mail(char id[]){
@@ -131,7 +133,7 @@ void spam_email(char spam_email[]){
       break;
     }
   }
-  fclose(sf);
+  fclose(sf);//json으로 다시 짜기
 }
 
 int mail_to_trash(char id[]){
@@ -181,6 +183,7 @@ void login(){
   }
   pass[i] = '\0';
   strcpy(user->user_pass,pass);
+	//login.py 
   printf("\n");
   printf("********************************************************\n");
 }
@@ -188,8 +191,7 @@ void login(){
 int main(void)
 {
   login();
-  FILE * fp = fopen("mail_storage.txt","w");
-  FILE * sp = fopen("spam_email.txt","w"); // 이후에 txt파일 읽어서 같은 email 이 존재 하지 않으면 spam_email.txt에 email 레이블 쓰기.
+// spam_email.json읽어서 같은 email 이 존재 하지 않으면 spam_email.txt에 email 레이블 쓰기.
   char deilm[2] = "?;";
   char command[30];
   char * str;
