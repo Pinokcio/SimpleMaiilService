@@ -20,6 +20,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <termios.h>
+#include <stdbool.h>
 
 #ifndef WIN32
 #include <pthread.h>
