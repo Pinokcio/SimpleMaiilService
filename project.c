@@ -1,4 +1,5 @@
 #include "common.h"
+#include "parson.h"
 
 #define CERTFILE "client.pem"
 
@@ -22,6 +23,28 @@ user_info * user;
 mail_info * mail;
 int * mail_cnt;
 
+char * itoa(int val, char * buf, int radix){
+  char * p = buf;
+  if(!val){
+    *p++ = '0';
+    *p = '\0';
+    return buf;
+  }
+  while(val){
+    if(radix<=10)
+      *p++ = (val % radix) + '0';
+    else{
+      int t = val % radix;
+      if(t <= 9)
+        *p++ = t+ '0';
+      else
+        *p++ = t - 10 + 'a';
+    }
+    val /= radix;
+  }
+  *p = '\0';
+  return buf;
+}
 int getch(void) {
   int ch;
   struct termios old, new;
@@ -73,7 +96,7 @@ void send_mail(){
     int result = 0;
     printf("Mail is being sended~\n");
     wait(NULL);
-    printf("Sending mail is set.\n");
+    printf("Sending mail is finished.\n");
   }
   else{
     printf("send error\n");
@@ -93,16 +116,36 @@ int receive_mail(){
   int i = 0;
   // mail_id?;sub?;from?;from_email?;is_trash?;is_read
 }
-
 char * get_mail_body(){
     //mail 내용 가져오기.
+    //python으로 로그인 체크.
 }
 
 void list_mail(){
   // 메일 보관함에 있는 메일들을 모두 출력.
+  JSON_Value *rootValue;
+  JSON_Object *rootObject;
+
+  rootValue = json_parse_file("spam_email.json");
+  rootObject = json_value_get_object(rootValue);
+
   for(int i=0;i<*mail_cnt;i++){
     if(!mail[i].is_trash){
-      printf("%s\t%s\t%s<%s>\t%d",(&mail[i])->mail_id,(&mail[i])->sub,(&mail[i])->from_name,(&mail[i])->from_email,mail[i].day);
+      int j = 0;
+      int json_cnt = 0;
+      JSON_Array * spam = (JSON_Array *)malloc(sizeof(JSON_Array));
+      spam = json_object_get_array(rootObject,user->user_email);
+      if(spam != NULL){
+        json_cnt = json_array_get_count(spam);
+        for(j=0;j<json_cnt;j++){
+          if(!strcmp(&mail[i])->mail_email,json_array_get_string(spam,j)){
+            break;
+          }
+        }
+        free(spam);
+      }
+      if(spam == NULL || j == json_cnt)
+        printf("%s\t%s\t%s<%s>\t%d",(&mail[i])->mail_id,(&mail[i])->sub,(&mail[i])->from_name,(&mail[i])->from_email,mail[i].day);
     }
   }
 }
@@ -112,26 +155,46 @@ int alert_unread_mail(){
 }
 
 int open_mail(char id[]){
-  int index = index = mail_index_search(id);
+  int index = mail_index_search(id);
   if(index < 0)
     return -1;
   printf("%s\n%s<%s>\n%d\n%s",(&mail[index])->sub,(&mail[index])->from_name,(&mail[index])->from_email,mail[index].day,get_mail_body());
 }
 
-void spam_email(char spam_email[]){
-  FILE * sf = fopen("spam_email.txt","rw");
-  char email[30] = "\t";
-  char * str = (char*)malloc(10000);
-  strcat(email,spam_email);
-  strcat(email,"\n");
-  int flag = 0;
-  while(fgets(str,sizeof(str),sf)!=NULL){
-    if(strcmp(str,user->user_email)){
-      fputs(email,sf);
-      break;
-    }
+void spam_email(char email[], char spam_email[]){
+
+  JSON_Value *rootValue;
+  JSON_Object *rootObject;
+
+  rootValue = json_parse_file("spam_email.json");
+  rootObject = json_value_get_object(rootValue);
+
+  int count = json_object_get_number(rootObject,"count");
+  JSON_Array ** emails = (JSON_Array **)malloc(sizeof(JSON_Array*)*(count+1));
+  JSON_Array * tmp = json_object_get_array(rootObject, email);
+
+  char * buf = (char *)malloc(4);
+  for(int i=0;i<=count;i++){
+    const char * tmp_email = (const char *)malloc(1);
+    tmp_email = json_object_get_string(rootObject,itoa(i,buf,10));
+    emails[i] = json_object_get_array(rootObject,tmp_email);
   }
-  fclose(sf);
+  if(tmp == NULL){
+    count++;
+    emails = (JSON_Array **)realloc(emails,sizeof(JSON_Array*)*(count+1));
+    json_object_set_string(rootObject,itoa(count,buf,10),email);
+    json_object_set_value(rootObject, email, json_value_init_array());
+    emails[count] = json_object_get_array(rootObject, email);
+    json_array_append_string(emails[count],spam_email);
+    json_object_set_number(rootObject,"count",count);
+    json_serialize_to_file_pretty(rootValue,"spam_email.json");
+    json_value_free(rootValue);
+    return;
+  }
+  json_array_append_string(tmp,spam_email);
+
+  json_serialize_to_file_pretty(rootValue,"spam_email.json");
+  json_value_free(rootValue);
 }
 
 int mail_to_trash(char id[]){
@@ -181,6 +244,20 @@ void login(){
   }
   pass[i] = '\0';
   strcpy(user->user_pass,pass);
+  //login.py
+  int pchild;
+  // if((pchild = fork()) == 0){
+  //   char * argv[] = {"./login",user->user_email,to_email,tuser->user_pass,NULL};
+  //   execvp("./login",argv);
+  // }
+  // else if(pchild > 0){
+  //   int result = 0;
+  //   wait(NULL);
+  // }
+  // else{
+  //   printf("Login error\n");
+  //   return;
+  // }
   printf("\n");
   printf("********************************************************\n");
 }
@@ -188,13 +265,9 @@ void login(){
 int main(void)
 {
   login();
-  FILE * fp = fopen("mail_storage.txt","w");
-  FILE * sp = fopen("spam_email.txt","w"); // 이후에 txt파일 읽어서 같은 email 이 존재 하지 않으면 spam_email.txt에 email 레이블 쓰기.
-  char deilm[2] = "?;";
   char command[30];
   char * str;
   printf("If you need help, write command : help\n\n");
-
 
   while(1){
     printf("command : ");
@@ -223,7 +296,7 @@ int main(void)
     }
     else if(!strcmp(str,"spam")){
       str = strtok(NULL, " ");
-      spam_email(str);
+      spam_email(user->user_email, str);
     }
     else if(!strcmp(str,"help")){
       helper();
@@ -237,6 +310,5 @@ int main(void)
       continue;
     }
   }
-  fclose(fp);
   return 0;
 }
