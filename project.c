@@ -19,9 +19,16 @@ typedef struct user_info{
   char user_pass[30];
 }user_info;
 
+typedef struct multiargv{
+  char email[50];
+  char spam_email[50];
+}multiargv;
+
 user_info * user;
 mail_info * mail;
 int * mail_cnt;
+pthread_mutex_t mutex_mail = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_spam = PTHREAD_MUTEX_INITIALIZER;
 
 char * itoa(int val, char * buf, int radix){
   char * p = buf;
@@ -100,7 +107,6 @@ void send_mail(){
   }
   else{
     printf("send error\n");
-    return;
   }
 }
 
@@ -108,15 +114,19 @@ int get_idcnt(){
   // 메일의 총 갯수 리턴
   return 0;
 }
-int receive_mail(){
+void *receive_mail(){
   // get_idcnt를 통해 얻은 수만큼 mail 변수에 동적할당
   // 크롤러를 통해 받은 메세지들을 메일 구조체에 담음.
   // spam_email.txt 확인 후 존재하는 이메일은 구조체에 담지 않을 것.
+  pthread_mutex_lock(&mutex_mail);
+  pthread_mutex_lock(&mutex_spam);
   mail = (mail_info*)malloc(sizeof(mail_info)*get_idcnt());
   int i = 0;
   // mail_id?;sub?;from?;from_email?;is_trash?;is_read
+  pthread_mutex_unlock(&mutex_mail);
+  pthread_mutex_unlock(&mutex_spam);
 }
-char * get_mail_body(){
+void get_mail_body(){
     //mail 내용 가져오기.
     //python으로 로그인 체크.
 }
@@ -133,12 +143,11 @@ void list_mail(){
     if(!mail[i].is_trash){
       int j = 0;
       int json_cnt = 0;
-      JSON_Array * spam = (JSON_Array *)malloc(sizeof(JSON_Array));
-      spam = json_object_get_array(rootObject,user->user_email);
+      JSON_Array * spam = json_object_get_array(rootObject,user->user_email);
       if(spam != NULL){
         json_cnt = json_array_get_count(spam);
         for(j=0;j<json_cnt;j++){
-          if(!strcmp(&mail[i])->mail_email,json_array_get_string(spam,j)){
+          if(!strcmp((&mail[i])->from_email,json_array_get_string(spam,j))){
             break;
           }
         }
@@ -150,19 +159,26 @@ void list_mail(){
   }
 }
 
-int alert_unread_mail(){
+void alert_unread_mail(){
  // 처음 프로그램 작동시 새롭게 추가된 메세지가 있으면 알려줌.
 }
 
-int open_mail(char id[]){
+void open_mail(void * data){
+  char * id = (char *)malloc(50);
+  id = (char *)data;
   int index = mail_index_search(id);
   if(index < 0)
-    return -1;
-  printf("%s\n%s<%s>\n%d\n%s",(&mail[index])->sub,(&mail[index])->from_name,(&mail[index])->from_email,mail[index].day,get_mail_body());
+    printf("ID is not presented.\n");
+  printf("%s\n%s<%s>\n%d\n",(&mail[index])->sub,(&mail[index])->from_name,(&mail[index])->from_email,mail[index].day);
+  get_mail_body();
 }
 
-void spam_email(char email[], char spam_email[]){
-
+void *spam_email(void * data){
+  pthread_mutex_lock(&mutex_spam);
+  char * email = (char *)malloc(50);
+  char * spam_email = (char *)malloc(50);
+  email = ((multiargv*)data)->email;
+  spam_email = ((multiargv*)data)->spam_email;
   JSON_Value *rootValue;
   JSON_Object *rootObject;
 
@@ -189,21 +205,27 @@ void spam_email(char email[], char spam_email[]){
     json_object_set_number(rootObject,"count",count);
     json_serialize_to_file_pretty(rootValue,"spam_email.json");
     json_value_free(rootValue);
-    return;
   }
-  json_array_append_string(tmp,spam_email);
+  else{
+    json_array_append_string(tmp,spam_email);
 
-  json_serialize_to_file_pretty(rootValue,"spam_email.json");
-  json_value_free(rootValue);
+    json_serialize_to_file_pretty(rootValue,"spam_email.json");
+    json_value_free(rootValue);
+  }
+  pthread_mutex_unlock(&mutex_spam);
 }
 
-int mail_to_trash(char id[]){
+void *mail_to_trash(void * data){
+  pthread_mutex_lock(&mutex_mail);
+  char * id = (char *)malloc(50);
+  id = (char *)data;
   int index = mail_index_search(id);
   if(index < 0){
-    return -1;
+    printf("ID is not presented.\n");
   }
   mail[index].is_trash = 1;
-  return 1;
+  printf("Mail is deleted.\n");
+  pthread_mutex_unlock(&mutex_mail);
 }
 
 void helper(){
@@ -267,41 +289,72 @@ int main(void)
   login();
   char command[30];
   char * str;
+  pthread_t p_thread[7];
+  int thr_id;
+  int status;
   printf("If you need help, write command : help\n\n");
-
+  int * flag = (int *)calloc(6,sizeof(int));
   while(1){
     printf("command : ");
     fgets(command,sizeof(command),stdin);
     command[strlen(command)-1] = '\0';
     str = strtok(command, " ");
     if(!strcmp(str,"update")){
-      receive_mail();
       *mail_cnt = get_idcnt();
+      if(flag[0])
+        pthread_join(p_thread[0], (void **)&status);
+      thr_id = pthread_create(&p_thread[0], NULL, receive_mail, NULL);
+      flag[0] = 1;
+      if(thr_id<0){
+        perror("thread create error.");
+        continue;
+      }
     }
     else if(!strcmp(str,"list")){
       list_mail();
     }
     else if(!strcmp(str,"open")){
       str = strtok(NULL, " ");
-      if(open_mail(str) < 0)
-        printf("There is no such mail ID\n");
+      open_mail(str);
     }
     else if(!strcmp(str,"remove")){
       str = strtok(NULL, " ");
-      if(mail_to_trash(str)<0)
-        printf("There is no such mail ID\n");
+      if(flag[1])
+        pthread_join(p_thread[1], (void **)&status);
+      thr_id = pthread_create(&p_thread[3], NULL,mail_to_trash,(void *)str);
+      flag[1] = 1;
+      if(thr_id<0){
+        perror("thread create error.");
+        continue;
+      }
     }
     else if(!strcmp(str,"send")){
       send_mail();
     }
     else if(!strcmp(str,"spam")){
       str = strtok(NULL, " ");
-      spam_email(user->user_email, str);
+      multiargv * multi = (multiargv *)malloc(sizeof(multiargv));
+      strcpy(multi->email, user->user_email);
+      strcpy(multi->spam_email, str);
+      if(flag[2])
+        pthread_join(p_thread[2], (void **)&status);
+      thr_id = pthread_create(&p_thread[2], NULL,spam_email,(void *)multi);
+      flag[2] = 1;
+      if(thr_id<0){
+        perror("thread create error.");
+        continue;
+      }
     }
     else if(!strcmp(str,"help")){
       helper();
     }
     else if(!strcmp(str,"exit")){
+      if(flag[0])
+        pthread_join(p_thread[0], (void **)&status);
+      if(flag[1])
+        pthread_join(p_thread[1], (void **)&status);
+      if(flag[2])
+        pthread_join(p_thread[2], (void **)&status);
       printf("~~Bye bye~~\n");
       exit(0);
     }

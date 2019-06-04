@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <termios.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #ifndef WIN32
 #include <pthread.h>
