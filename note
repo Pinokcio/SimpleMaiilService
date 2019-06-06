@@ -1,0 +1,9 @@
+update   / mail 에 영향줌, spam_email.txt에 영향받음, 화면 출력 x : 0
+spam     / spam_email.txt 에 영향줌, 화면 출력 x : 1
+remove   / mail 에 영향줌, 화면 출력 x : 2
+list     / mail 에 영향받음, spam_email.txt에 영향받음, 화면 출력 o
+open     / mail 에 영향받음, 화면 출력 o
+helper   / 화면 출력 o
+send     / 화면 출력 및 입력 o
+login    / 화면 출력 o, login.txt 생성 후 삭제.
+exit

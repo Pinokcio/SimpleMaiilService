@@ -56,22 +56,22 @@ SSL_CTX *setup_client_ctx(void){
 
 int main(int argc, char *argv[])
 {
-	char from_email[30];
+	char from_email[100];
 	strcpy(from_email, argv[1]);
-  char to_email[30];
+  char to_email[100];
   strcpy(to_email, argv[2]);
-  char from_name[20];
+  char from_name[100];
 	strcpy(from_name, argv[3]);
-  char to_name[20];
+  char to_name[100];
   strcpy(to_name, argv[4]);
 	char from_pass[30];
 	strcpy(from_pass, argv[5]);
-  char sub[100];
+  char sub[200];
   strcpy(sub, argv[6]);
   char * body = (char *)malloc(5000);
 	char * head = (char *)malloc(5500);
   strcpy(body, argv[7]);
-
+  printf("1%s 2%s 3%s 4%s 5%s 6%s 7%s \n",from_email,to_email,from_name,to_name,from_pass,sub,body);
   BIO *conn;
   SSL *ssl;
   SSL_CTX *ctx;
@@ -141,9 +141,8 @@ int main(int argc, char *argv[])
 
   bzero(buffer,sizeof(buffer));
   SSL_read(ssl, buffer, sizeof(buffer));
-
   strcat(from_email,">\r\n");
-	char from[50] = "mail from: <";
+	char from[100] = "mail from: <";
 	strcat(from,from_email);
 	SSL_write(ssl,from,strlen(from));
 
@@ -151,7 +150,7 @@ int main(int argc, char *argv[])
   SSL_read(ssl, buffer, sizeof(buffer));
 
   strcat(to_email,">\r\n");
-	char rcpt[50] = "rcpt to: <";
+	char rcpt[100] = "rcpt to: <";
   strcat(rcpt,to_email);
   SSL_write(ssl,rcpt,strlen(rcpt));
 
@@ -180,7 +179,6 @@ int main(int argc, char *argv[])
 
   bzero(buffer,sizeof(buffer));
   SSL_read(ssl, buffer, sizeof(buffer));
-
 
   SSL_free(ssl);
   SSL_CTX_free(ctx);
