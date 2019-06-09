@@ -19,13 +19,13 @@ def list_mail(id) :
 
     if os.path.isfile("./" + jsonfile) :
         with open(jsonfile, 'r') as file:
-            jsondata = json.load(file)
+            jsondata = json.load(file, object_pairs_hook=OrderedDict)
             start_cnt = jsondata['Count']
             last_time = jsondata[str(start_cnt)]['day']
             re_flag = True
             # "update" = str(last_time)
 
-    with open(jsonfile, 'w') as file:
+    with open(jsonfile, 'w+') as file:
         root_dict = OrderedDict()
         root_dict["Count"] = 0
         root_dict["update"] = 0
@@ -75,14 +75,19 @@ def list_mail(id) :
             else:
                 tmp["is_read"] = 0
             # file.write('"' + str(cnt) + '"' + ":")
-            root_dict[str(cnt)] = tmp
+            if re_flag:
+                if tmp['day'] > last_time:
+                    jsondata[str(cnt)] = tmp
+            else :
+                root_dict[str(cnt)] = tmp
             # json.dump(tmp, file, ensure_ascii=False)
-        root_dict['Count'] = cnt
         if re_flag:
-            root_dict["update"] = last_time
-
-        json.dump(root_dict, file, ensure_ascii=False)
-        print("업데이트 없음")
+            jsondata["update"] = last_time
+            jsondata["Count"] = cnt
+            json.dump(jsondata, file, ensure_ascii=False)
+        else:
+            root_dict['Count'] = cnt
+            json.dump(root_dict, file, ensure_ascii=False)
         # file.write("\n}")
         # file.write('"Count"' + ":" + str(cnt) + "," + '"update"' + ":" + "0\n}")
     file.close()
@@ -92,6 +97,5 @@ def list_mail(id) :
 g = gmail.login(sys.argv[1], sys.argv[2])
 g.logged_in
 # except  gmail.AuthenticationError:  # could not log in
-
 list_mail(sys.argv[1])
 g.logout
