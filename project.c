@@ -28,7 +28,6 @@ user_info * user;
 mail_info * mail;
 int * mail_cnt;
 int * old_mail_cnt;
-int * new_mail;
 pthread_mutex_t mutex_mail = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_spam = PTHREAD_MUTEX_INITIALIZER;
 
@@ -48,9 +47,9 @@ int getch(void) {
 
 void send_mail(){
   int pchild;
-  char to_email[30];
-  char to_name[20];
-  char sub[100];
+  char to_email[100];
+  char to_name[100];
+  char sub[200];
   char * body = (char *)malloc(5000);
   strcpy(body,"");
   printf("받는 사람 이메일 주소 : ");
@@ -58,11 +57,12 @@ void send_mail(){
   printf("받는 사람 이름 : ");
   scanf("%s",to_name);
   printf("메일 제목 : ");
-  scanf("%s",sub);
+  while(getchar()!='\n');
+  fgets(sub,sizeof(sub),stdin);
+  sub[strlen(sub)-1] = '\0';
   printf("메일 내용 (내용 입력을 마친 후 EOM(End Of Mail)을 입력해주세요.):\n");
   char * phrase = (char *)malloc(1000);
   strcpy(phrase,"");
-  while(getchar()!='\n');
   fgets(phrase,malloc_usable_size(phrase),stdin);
   while((strcmp(phrase,"EOM\n"))){
 	  strcat(body,phrase);
@@ -90,22 +90,23 @@ int get_idcnt(){
   // 메일의 총 갯수 리턴
   JSON_Value *rootValue;
   JSON_Object *rootObject;
-  pthread_mutex_lock(&mutex_mail);
-  char file_name[70] = "list_mail-";
+  char file_name[100] = "list_mail-";
   strcat(file_name,user->user_email);
   strcat(file_name,".json");
   rootValue = json_parse_file(file_name);
   rootObject = json_value_get_object(rootValue);
-  pthread_mutex_unlock(&mutex_mail);
-  return json_object_get_number(rootObject,"Count");
+  int cnt = json_object_get_number(rootObject,"Count");
+  json_value_free(rootValue);
+  return cnt;
 }
 void *update_mail(){
   // mail_cnt만큼 mail 변수에 동적할당
   // 파이썬 크롤러 프로그램을 통해 json파일에 저장 받은 메세지들을 메일 구조체타입 배열에 담음.
+  pthread_mutex_lock(&mutex_mail);
   JSON_Value *rootValue;
   JSON_Object *rootObject;
 
-  char file_name[70] = "list_mail-";
+  char file_name[100] = "list_mail-";
   strncat(file_name,user->user_email,strlen(user->user_email));
   strncat(file_name,".json",strlen(".json"));
   int pchild;
@@ -121,7 +122,18 @@ void *update_mail(){
     printf("Update error\n");
     return (void*)-1;
   }
-
+  if((pchild = fork()) == 0){
+    char * argv[] = {"./py2to3",user->user_email,NULL};
+    execvp("./py2to3",argv);
+  }
+  else if(pchild > 0){
+    int result = 0;
+    wait(NULL);
+  }
+  else{
+    printf("Update error\n");
+    return (void*)-1;
+  }
   *old_mail_cnt = *mail_cnt;
   *mail_cnt = get_idcnt();
   rootValue = json_parse_file(file_name);
@@ -129,48 +141,51 @@ void *update_mail(){
   char * buf = (char *)malloc(4);
   JSON_Object * mail_tmp;
   long time = json_object_get_number(rootObject,"update");
-  pthread_mutex_lock(&mutex_mail);
-  pthread_mutex_lock(&mutex_spam);
   if(malloc_usable_size(mail) == 0){
     mail = (mail_info*)malloc(sizeof(mail_info)*(*mail_cnt));
     for(int i=0;i<*mail_cnt;i++){
       sprintf(buf,"%d",i+1);
       mail_tmp = json_object_get_object(rootObject,buf);
       strncpy((&mail[i])->mail_id, json_object_get_string(mail_tmp,"mail_id"),20);
-      strncpy((&mail[i])->sub, json_object_get_string(mail_tmp,"sub"),100);
-      strncpy((&mail[i])->from_name, json_object_get_string(mail_tmp,"from_name"),50);
-      strncpy((&mail[i])->from_email, json_object_get_string(mail_tmp,"from_email"),50);
+      strncpy((&mail[i])->sub, json_object_get_string(mail_tmp,"sub"),200);
+      strncpy((&mail[i])->from_name, json_object_get_string(mail_tmp,"from_name"),100);
+      strncpy((&mail[i])->from_email, json_object_get_string(mail_tmp,"from_email"),100);
       mail[i].day = json_object_get_number(mail_tmp,"day");
       mail[i].is_trash = json_object_get_number(mail_tmp,"is_trash");
       mail[i].is_read = json_object_get_number(mail_tmp,"is_read");
-      if(time<mail[i].day){
-        (*new_mail)++;
-      }
     }
   }
   else if(*old_mail_cnt != *mail_cnt){
     mail = realloc(mail,(*mail_cnt)*sizeof(mail_info));
     for(int i=*old_mail_cnt;i<*mail_cnt;i++){
-      sprintf(buf,"%d",i);
+      sprintf(buf,"%d",i+1);
       mail_tmp = json_object_get_object(rootObject,buf);
-      strncpy((&mail[i])->mail_id, json_object_get_string(mail_tmp,"mail_id"),50);
-      strncpy((&mail[i])->sub, json_object_get_string(mail_tmp,"sub"),100);
-      strncpy((&mail[i])->from_name, json_object_get_string(mail_tmp,"from_name"),50);
-      strncpy((&mail[i])->from_email, json_object_get_string(mail_tmp,"from_email"),50);
+      strncpy((&mail[i])->mail_id, json_object_get_string(mail_tmp,"mail_id"),20);
+      strncpy((&mail[i])->sub, json_object_get_string(mail_tmp,"sub"),200);
+      strncpy((&mail[i])->from_name, json_object_get_string(mail_tmp,"from_name"),100);
+      strncpy((&mail[i])->from_email, json_object_get_string(mail_tmp,"from_email"),100);
       mail[i].day = json_object_get_number(mail_tmp,"day");
       mail[i].is_trash = json_object_get_number(mail_tmp,"is_trash");
       mail[i].is_read = json_object_get_number(mail_tmp,"is_read");
-      if(time<mail[i].day){
-        (*new_mail)++;
-      }
     }
   }
   pthread_mutex_unlock(&mutex_mail);
-  pthread_mutex_unlock(&mutex_spam);
   json_value_free(rootValue);
 }
-void get_mail_body(){
+void get_mail_body(int index){
     //mail 내용 가져오기.
+    int pchild;
+    if((pchild = fork()) == 0){
+      char * argv[] = {"./get_body",user->user_email,user->user_pass,mail[index].mail_id,NULL};
+      execvp("./get_body",argv);
+    }
+    else if(pchild > 0){
+      int result = 0;
+      wait(NULL);
+    }
+    else{
+      printf("Get mail error\n");
+    }
 }
 void list_mail(){
   // 메일 보관함에 있는 메일들을 모두 출력. (spam 이메일로 지정된 메일은 제외)
@@ -183,7 +198,7 @@ void list_mail(){
   int json_cnt = json_array_get_count(spam);
   if(!(*mail_cnt))
     printf("Mail doesn't exist.\n");
-  printf("There are %d in storage.(Including in trash)\n",*mail_cnt);
+  printf("There are %d in storage.(Including thing that be removed)\n",*mail_cnt);
   for(int i=0;i<*mail_cnt;i++){
     if(!mail[i].is_trash){
       int j = 0;
@@ -219,7 +234,7 @@ void list_mail(){
   json_value_free(rootValue);
 }
 void open_mail(int index){
-  if(index < 1 || index > *mail_cnt){
+  if(index < 0 || index >= *mail_cnt){
     printf("Incorrect number.\n");
     return;
   }
@@ -230,8 +245,23 @@ void open_mail(int index){
   int time = mail[index].day%10000000000%100000000%1000000/10000;
   int minute = mail[index].day%10000000000%100000000%1000000%10000/100;
   int second = mail[index].day%10000000000%100000000%1000000%10000%100;
-  printf("%s\n%s<%s>\n%d-%d-%d-%d-%d-%d\n",(&mail[index])->sub,(&mail[index])->from_name,(&mail[index])->from_email,year,month,day,time,minute,second);
-  get_mail_body();
+  printf("sub : %s\nfrom : %s<%s>\ntime : %d-%d-%d-%d-%d-%d\nbody :\n",(&mail[index])->sub,(&mail[index])->from_name,(&mail[index])->from_email,year,month,day,time,minute,second);
+  get_mail_body(index);
+
+  JSON_Value *rootValue;
+  JSON_Object *rootObject;
+
+  char file_name[100] = "list_mail-";
+  strncat(file_name,user->user_email,strlen(user->user_email));
+  strncat(file_name,".json",strlen(".json"));
+  rootValue = json_parse_file(file_name);
+  rootObject = json_value_get_object(rootValue);
+  char * buf = (char *)malloc(4);
+  sprintf(buf,"%d",index+1);
+  JSON_Object *subObject = json_object_get_object(rootObject,buf);
+  json_object_set_number(subObject,"is_read",1);
+  json_serialize_to_file_pretty(rootValue,file_name);
+  json_value_free(rootValue);
 }
 void *spam_email(void * data){
   pthread_mutex_lock(&mutex_spam);
@@ -286,7 +316,7 @@ void *mail_to_trash(void * data){
   JSON_Value *rootValue;
   JSON_Object *rootObject;
 
-  char file_name[70] = "list_mail-";
+  char file_name[100] = "list_mail-";
   strncat(file_name,user->user_email,strlen(user->user_email));
   strncat(file_name,".json",strlen(".json"));
   rootValue = json_parse_file(file_name);
@@ -307,8 +337,8 @@ void helper(){
 
   printf("update\t\t\t : Update new mail from storage.\n");
   printf("list\t\t\t : Print the mail list\n");
-  printf("open (list number)\t\t : Open the mail to see in detail\n");
-  printf("remove (mail_id)\t : Remove the mail from list\n");
+  printf("open (list number)\t : Open the mail to see in detail\n");
+  printf("remove (list number)\t : Remove the mail from list\n");
   printf("send\t\t\t : Send mail\n");
   printf("spam (email address)\t : Set the spam email\n");
   printf("exit\t\t\t : Program exit\n");
@@ -381,19 +411,7 @@ int main(void)
   int * flag = (int *)calloc(3,sizeof(int));
   mail_cnt = (int *)calloc(1,sizeof(int));
   old_mail_cnt = (int *)calloc(1,sizeof(int));
-  new_mail = (int *)calloc(1,sizeof(int));
-  if(flag[0]){
-    pthread_join(p_thread[0], (void **)&status);
-    flag[0] = 0;
-  }
-  if(flag[1]){
-    pthread_join(p_thread[1], (void **)&status);
-    flag[1] = 0;
-  }
-  if(flag[2]){
-    pthread_join(p_thread[2], (void **)&status);
-    flag[2] = 0;
-  }
+
   thr_id = pthread_create(&p_thread[0], NULL, update_mail, NULL);
   flag[0] = 1;
   if(flag[0]){
@@ -401,7 +419,6 @@ int main(void)
     flag[0] = 0;
   }
   printf("All mails are loaded.\n");
-  *new_mail = 0;
   printf("If you need help, write command : help\n\n");
 
   while(1){
@@ -414,20 +431,9 @@ int main(void)
     command[strlen(command)-1] = '\0';
     str = strtok(command, " ");
     if(!strcmp(str,"update")){
-      if(*new_mail){
-        printf("New %d mails are updated.\n",*new_mail);
-        *new_mail = 0;
-      }
-      else{
-        printf("New mail doesn't exist.\n");
-      }
       if(flag[0]){
         pthread_join(p_thread[0], (void **)&status);
         flag[0] = 0;
-      }
-      if(flag[1]){
-        pthread_join(p_thread[1], (void **)&status);
-        flag[1] = 0;
       }
       if(flag[2]){
         pthread_join(p_thread[2], (void **)&status);
@@ -444,10 +450,6 @@ int main(void)
       if(flag[0]){
         pthread_join(p_thread[0], (void **)&status);
         flag[0] = 0;
-      }
-      if(flag[1]){
-        pthread_join(p_thread[1], (void **)&status);
-        flag[1] = 0;
       }
       if(flag[2]){
         pthread_join(p_thread[2], (void **)&status);
@@ -469,7 +471,7 @@ int main(void)
         printf("Check Usage by command : help\n");
         continue;
       }
-      open_mail(atoi(str));
+      open_mail(atoi(str)-1);
     }
     else if(!strcmp(str,"remove")){
       str = strtok(NULL, " ");
@@ -537,6 +539,8 @@ int main(void)
         pthread_join(p_thread[0], (void **)&status);
       if(flag[1])
         pthread_join(p_thread[1], (void **)&status);
+      if(flag[2])
+        pthread_join(p_thread[2], (void **)&status);
       printf("~~Bye bye~~\n");
       exit(0);
     }

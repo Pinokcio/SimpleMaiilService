@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
   char * body = (char *)malloc(5000);
 	char * head = (char *)malloc(5500);
   strcpy(body, argv[7]);
-  printf("1%s 2%s 3%s 4%s 5%s 6%s 7%s \n",from_email,to_email,from_name,to_name,from_pass,sub,body);
+
   BIO *conn;
   SSL *ssl;
   SSL_CTX *ctx;
